@@ -94,7 +94,7 @@ resource "yandex_compute_instance" "vm-3" {
 
   provisioner "remote-exec" {
     inline = [
-      "sudo apt-get update && sudo apt install -y screen && sudo screen -dm python3 -m http.server 80 --bind 0.0.0.0"
+      "sudo apt-get update && sudo apt install -y screen && cd /home/ubuntu && su - ubuntu && sudo screen -dm \"python3 -m http.server 80 --bind 0.0.0.0\"" # ???????
     ]
     connection {
       type = "ssh"
@@ -328,33 +328,10 @@ resource "yandex_alb_http_router" "my_router" {
 }
 
 
-# resource "yandex_alb_virtual_host" "virtual_host" {
-#   name           = "virtual-host"
-#   authority      = ["virtual-host"]
-#   http_router_id = yandex_alb_http_router.my_router.id
-#   route {
-#     name = "virtual-host"
-#     http_route {
-#       http_match {
-#         http_method = []
-#         path {
-#           prefix = "/"
-#         }
-#       }
-#       http_route_action {
-#         backend_group_id = yandex_alb_backend_group.python_backend_group.id
-#         timeout = "3s"
-#       }
-#     }
-#   }
-# }
 
 
-
-resource "yandex_alb_virtual_host" "virtual_host_for_web_servers" {
-  name           = "virtual-host-for-web-servers"
-  authority      = ["web-servers"]
-  # authority      = ["virtual-host-for-web-servers"]
+resource "yandex_alb_virtual_host" "virtual_host" {
+  name           = "virtual-host"
   http_router_id = yandex_alb_http_router.my_router.id
   route {
     name = "route-for-web-servers"
@@ -368,50 +345,23 @@ resource "yandex_alb_virtual_host" "virtual_host_for_web_servers" {
       http_route_action {
         backend_group_id = yandex_alb_backend_group.web_servers_backend_group.id
         timeout = "3s"
+        prefix_rewrite = "/"
       }
     }
   }
-}
-
-resource "yandex_alb_virtual_host" "virtual_host_for_python" {
-  name           = "virtual-host-for-python"
-  authority      = ["python"]
-  # authority      = ["virtual-host-for-python"]
-  http_router_id = yandex_alb_http_router.my_router.id
   route {
-    name = "route-for-python"
+    name = "route-for-web-dv"
     http_route {
       http_match {
         http_method = []
         path {
-          exact = "/python"
+          prefix = "/db"
         }
       }
       http_route_action {
-        backend_group_id = yandex_alb_backend_group.python_backend_group.id
+        backend_group_id = yandex_alb_backend_group.web_servers_backend_group.id
         timeout = "3s"
-      }
-    }
-  }
-}
-
-resource "yandex_alb_virtual_host" "virtual_host_for_web_db" {
-  name           = "virtual-host-for-web-db"
-  authority      = ["web-db"]
-  # authority      = ["virtual-host-for-web-db"]
-  http_router_id = yandex_alb_http_router.my_router.id
-  route {
-    name = "route-for-web-db"
-    http_route {
-      http_match {
-        http_method = []
-        path {
-          prefix = "/webdb"
-        }
-      }
-      http_route_action {
-        backend_group_id = yandex_alb_backend_group.web_dbs_backend_group.id
-        timeout = "3s"
+        prefix_rewrite = "/"
       }
     }
   }
