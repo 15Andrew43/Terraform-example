@@ -94,7 +94,11 @@ resource "yandex_compute_instance" "vm-3" {
 
   provisioner "remote-exec" {
     inline = [
-      "sudo apt-get update && sudo apt install -y screen && cd /home/ubuntu && su - ubuntu && sudo screen -dm \"python3 -m http.server 80 --bind 0.0.0.0\"" # ???????
+      "sudo apt-get update",
+      "sudo apt-get install -y screen",
+      "cd /home/ubuntu",
+      "nohup sudo python3 -m http.server 80 --bind 0.0.0.0 > /dev/null 2>&1 &", # "sudo screen -dm python3 -m 'http.server 80 --bind 0.0.0.0'",
+      "sleep 1"
     ]
     connection {
       type = "ssh"
