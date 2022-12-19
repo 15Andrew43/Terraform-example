@@ -12,17 +12,27 @@ provider "yandex" {
 }
 
 
+
+
+
+
+#####################################################################################################################################
+##  
+##  yandex_compute_instance
+
+
 resource "yandex_compute_instance" "vm-1" {
   name = "nginx"
 
   resources {
     cores  = 2
     memory = 2
+    core_fraction = 20
   }
 
   provisioner "remote-exec" {
     inline = [
-      "sudo apt-get update && sudo apt install -y screen && sudo apt-get install -y nginx"
+      "sudo apt-get update && sudo apt install -y nginx"
     ]
     connection {
       type = "ssh"
@@ -52,13 +62,14 @@ resource "yandex_compute_instance" "vm-2" {
   name = "apache"
 
   resources {
-    cores  = 4
-    memory = 4
+    cores  = 2
+    memory = 2
+    core_fraction = 20
   }
 
   provisioner "remote-exec" {
     inline = [
-      "sudo apt update && sudo apt install -y screen && sudo apt install -y apache2"
+      "sudo apt-get update && sudo apt install -y apache2"
     ]
     connection {
       type = "ssh"
@@ -90,13 +101,14 @@ resource "yandex_compute_instance" "vm-3" {
   resources {
     cores  = 2
     memory = 2
+    core_fraction = 20
   }
 
   provisioner "remote-exec" {
     inline = [
       "sudo apt-get update",
-      "sudo apt-get install -y screen",
-      "cd /home/ubuntu",
+      # "sudo apt-get install -y screen", пробовал сначала через screen, а не через nohup, но появлялась ошибка
+      # "cd /home/ubuntu",
       "nohup sudo python3 -m http.server 80 --bind 0.0.0.0 > /dev/null 2>&1 &", # "sudo screen -dm python3 -m 'http.server 80 --bind 0.0.0.0'",
       "sleep 1"
     ]
@@ -124,98 +136,78 @@ resource "yandex_compute_instance" "vm-3" {
   }
 }
 
-resource "yandex_compute_instance" "vm-4" {
-  name = "web-db-1"
 
-  resources {
-    cores  = 2
-    memory = 2
-  }
 
-  provisioner "remote-exec" {
-    inline = [
-      "sudo apt-get update",
-      # "sudo apt install apt-transport-https ca-certificates curl software-properties-common",
-      # "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -",
-      # "sudo add-apt-repository \"deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable\"",
-      # "sudo apt update",
-      # "apt-cache policy docker-ce",
-      # "sudo apt install docker-ce",
-      # "sudo systemctl status docker",
-      # "sudo usermod -aG docker ${var.yc_user}",
-      # "docker pull avborovets/restful_api_example",
-      # "docker run -p 80:8099 --rm -d --name restful_api_example avborovets/restful_api_example"
-    ]
-    connection {
-      type = "ssh"
-      user = var.yc_user
-      private_key = file(var.ssh_key)
-      host = self.network_interface[0].nat_ip_address
-    }
-  }
+
+
+#####################################################################################################################################
+##  
+##  containers
+
+
+data "yandex_compute_image" "container-optimized-image" {
+  family = "container-optimized-image"
+}
+
+resource "yandex_compute_instance" "container-web-db-1" {
+  name = "container-web-db-1"
 
   boot_disk {
     initialize_params {
-      image_id = "fd8kdq6d0p8sij7h5qe3"
+      image_id = data.yandex_compute_image.container-optimized-image.id
     }
+  }
+
+  resources {
+    cores = 2
+    memory = 2
+    core_fraction = 20
+  }
+
+  metadata = {
+    docker-container-declaration = file("${var.module}/declaration.yaml") # var.module = ~/cloud-terraform
+    user-data = file("${var.module}/cloud_config.yaml")
   }
 
   network_interface {
     subnet_id = yandex_vpc_subnet.subnet-1.id
     nat       = true
   }
-
-  metadata = {
-    ssh-keys = "${var.yc_user}:${file("${var.ssh_key}.pub")}"
-  }
 }
 
-resource "yandex_compute_instance" "vm-5" {
-  name = "web-db-2"
-
-  resources {
-    cores  = 2
-    memory = 2
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "sudo apt-get update",
-      # "sudo apt install apt-transport-https ca-certificates curl software-properties-common",
-      # "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -",
-      # "sudo add-apt-repository \"deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable\"",
-      # "sudo apt update",
-      # "apt-cache policy docker-ce",
-      # "sudo apt install docker-ce",
-      # "sudo systemctl status docker",
-      # "sudo usermod -aG docker ${var.yc_user}",
-      # "docker pull avborovets/restful_api_example",
-      # "docker run -p 80:8099 --rm -d --name restful_api_example avborovets/restful_api_example"
-    ]
-    connection {
-      type = "ssh"
-      user = var.yc_user
-      private_key = file(var.ssh_key)
-      host = self.network_interface[0].nat_ip_address
-    }
-  }
+resource "yandex_compute_instance" "container-web-db-2" {
+  name = "container-web-db-2"
 
   boot_disk {
     initialize_params {
-      image_id = "fd8kdq6d0p8sij7h5qe3"
+      image_id = data.yandex_compute_image.container-optimized-image.id
     }
+  }
+
+  resources {
+    cores = 2
+    memory = 2
+    core_fraction = 20
+  }
+
+  metadata = {
+    docker-container-declaration = file("${var.module}/declaration.yaml") # var.module = ~/cloud-terraform
+    user-data = file("${var.module}/cloud_config.yaml")
   }
 
   network_interface {
     subnet_id = yandex_vpc_subnet.subnet-1.id
     nat       = true
   }
-
-  metadata = {
-    ssh-keys = "${var.yc_user}:${file("${var.ssh_key}.pub")}"
-  }
 }
 
+
+
+
+
+#####################################################################################################################################
+##  
+##  yandex_alb_target_group
 
 
 resource "yandex_alb_target_group" "web_servers" {
@@ -245,14 +237,21 @@ resource "yandex_alb_target_group" "web_dbs" {
 
   target {
     subnet_id = "${yandex_vpc_subnet.subnet-1.id}"
-    ip_address   = "${yandex_compute_instance.vm-4.network_interface.0.ip_address}"
+    ip_address   = "${yandex_compute_instance.container-web-db-1.network_interface.0.ip_address}"
   }
   target {
     subnet_id = "${yandex_vpc_subnet.subnet-1.id}"
-    ip_address   = "${yandex_compute_instance.vm-5.network_interface.0.ip_address}"
+    ip_address   = "${yandex_compute_instance.container-web-db-2.network_interface.0.ip_address}"
   }
 }
 
+
+
+
+
+#####################################################################################################################################
+##  
+##  yandex_alb_backend_group
 
 
 resource "yandex_alb_backend_group" "web_servers_backend_group" {
@@ -305,7 +304,7 @@ resource "yandex_alb_backend_group" "web_dbs_backend_group" {
   http_backend {
     name = "web-dbs-http-backend"
     weight = 1
-    port = 80
+    port = 8099
     target_group_ids = ["${yandex_alb_target_group.web_dbs.id}"]
     load_balancing_config {
       panic_threshold = 50
@@ -322,6 +321,14 @@ resource "yandex_alb_backend_group" "web_dbs_backend_group" {
 }
 
 
+
+
+
+#####################################################################################################################################
+##  
+##  yandex_alb_load_balancer, yandex_alb_http_router, yandex_alb_virtual_host
+
+
 resource "yandex_alb_http_router" "my_router" {
   name      = "my-super-router"
   labels = {
@@ -330,9 +337,6 @@ resource "yandex_alb_http_router" "my_router" {
   }
 
 }
-
-
-
 
 resource "yandex_alb_virtual_host" "virtual_host" {
   name           = "virtual-host"
@@ -354,24 +358,38 @@ resource "yandex_alb_virtual_host" "virtual_host" {
     }
   }
   route {
-    name = "route-for-web-dv"
+    name = "route-for-python"
     http_route {
       http_match {
         http_method = []
         path {
-          prefix = "/db"
+          prefix = "/python"
         }
       }
       http_route_action {
-        backend_group_id = yandex_alb_backend_group.web_servers_backend_group.id
+        backend_group_id = yandex_alb_backend_group.python_backend_group.id
         timeout = "3s"
         prefix_rewrite = "/"
       }
     }
   }
+  route {
+    name = "route-for-web-db"
+    http_route {
+      http_match {
+        http_method = []
+        path {
+          prefix = "/web-db"
+        }
+      }
+      http_route_action {
+        backend_group_id = yandex_alb_backend_group.web_dbs_backend_group.id
+        timeout = "3s"
+        prefix_rewrite = "/users"
+      }
+    }
+  }
 }
-
-
 
 resource "yandex_alb_load_balancer" "my_load_balancer" {
   name        = "my-load-balancer"
@@ -404,10 +422,17 @@ resource "yandex_alb_load_balancer" "my_load_balancer" {
 }
 
 
+
+
+
+#####################################################################################################################################
+##  
+##  network
+
+
 resource "yandex_vpc_network" "network-1" {
   name = "network1"
 }
-
 
 resource "yandex_vpc_subnet" "subnet-1" {
   name           = "subnet1"
@@ -416,9 +441,157 @@ resource "yandex_vpc_subnet" "subnet-1" {
   v4_cidr_blocks = ["192.168.10.0/24"]
 }
 
-output "ip_address" {
-  value = yandex_compute_instance.vm-1.network_interface[0].nat_ip_address
-  description = "Public ip address"
+
+
+
+
+#####################################################################################################################################
+##  
+##  yandex_api_gateway
+
+
+################### generated by swagger ###############
+# curl -X 'POST' \
+#   'https://d5dl0m97t15rpnevqp36.apigw.yandexcloud.net/users' \
+#   -H 'accept: */*' \             
+#   -H 'Content-Type: application/json' \
+#   -d '{
+#   "id": 0, 
+#   "nickname": "kolya", 
+#   "email": "bbb@ccc",   
+#   "rating": 100500
+# }'
+
+################### generated by swagger ###############
+# curl -X 'PUT' \
+#   'https://d5dl0m97t15rpnevqp36.apigw.yandexcloud.net/users/11' \
+#   -H 'accept: application/json' \
+#   -H 'Content-Type: application/json' \
+#   -d '{
+#   "id": 11,
+#   "nickname": "qqqqqq",
+#   "email": "wwww@eeeee",
+#   "rating": 1543
+# }'
+
+
+resource "yandex_api_gateway" "my-super-api-gateway" {
+  name        = "my-super-api-gateway"
+  description = "some description"
+  labels      = {
+    label       = "label"
+    empty-label = ""
+  }
+  spec = <<-EOT
+    openapi: 3.0.0
+    info:
+      title: Sample API
+      version: 1.0.0
+    servers:
+    - url: https://d5dj41gj507llogo6m97.apigw.yandexcloud.net
+    paths:
+      /:
+        get:
+          x-yc-apigateway-integration:
+            type: dummy
+            content:
+              '*': Hello, World!
+            http_code: 200
+            http_headers:
+              Content-Type: text/plain
+      /users:
+        post:
+          x-yc-apigateway-integration:
+            type: http
+            method: POST
+            url: http://${yandex_compute_instance.container-web-db-1.network_interface.0.nat_ip_address}:8099/users
+            headers:
+              Content-Type: '{Content-Type}'
+            timeouts:
+              connect: 0.5
+              read: 5
+          parameters:
+          - explode: true
+            in: header
+            name: Content-Type
+            required: true
+            schema:
+              type: string
+            style: form
+          - explode: true
+            in: query
+            name: nickname
+            required: true
+            schema:
+              type: string
+            style: form
+          - explode: true
+            in: query
+            name: email
+            required: false
+            schema:
+              type: string
+            style: form
+          - explode: true
+            in: query
+            name: rating
+            required: false
+            schema:
+              type: integer
+            style: form
+      /users/{id}:
+        put:
+          x-yc-apigateway-integration:
+            type: http
+            method: PUT
+            url: http://${yandex_compute_instance.container-web-db-1.network_interface.0.nat_ip_address}:8099/users/{id}
+            headers:
+              Content-Type: '{Content-Type}'
+            timeouts:
+              connect: 0.5
+              read: 5
+          parameters:
+          - explode: true
+            in: path
+            name: id
+            required: true
+            schema:
+              type: string
+            style: form
+          - explode: true
+            in: query
+            name: id
+            required: true
+            schema:
+              type: string
+            style: form
+          - explode: true
+            in: header
+            name: Content-Type
+            required: true
+            schema:
+              type: string
+            style: form
+          - explode: true
+            in: query
+            name: nickname
+            required: true
+            schema:
+              type: string
+            style: form
+          - explode: true
+            in: query
+            name: email
+            required: false
+            schema:
+              type: string
+            style: form
+          - explode: true
+            in: query
+            name: rating
+            required: false
+            schema:
+              type: integer
+            style: form
+  EOT
 }
-
-
